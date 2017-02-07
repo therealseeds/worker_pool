@@ -20,6 +20,7 @@
 %% API
 -export([ task_init/3
         , task_end/1
+        , task_end/0
         , notify_queue_manager/3
         , do_try/1]).
 
@@ -41,6 +42,11 @@ task_init(Task, TimeChecker, OverrunTime) ->
   erlang:put(wpool_task, {TaskId, Time, Task}),
   erlang:send_after(
     OverrunTime, TimeChecker, {check, self(), TaskId, OverrunTime}).
+
+%% @doc Removes the current task from the worker
+-spec task_end() -> ok.
+task_end() ->
+  task_end(erlang:get(wpool_task)).
 
 %% @doc Removes the current task from the worker
 -spec task_end(undefined | reference()) -> ok.

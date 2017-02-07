@@ -129,6 +129,35 @@ handle_info(Info, State) ->
 %%%===================================================================
 %% @private
 -spec handle_cast(term(), state()) -> {noreply, state()}.
+handle_cast({queue_manager, From, {call, Call}}, State) ->
+  wpool_utils:task_init(
+    {call, Call},
+    proplists:get_value(time_checker, State#state.options, undefined),
+    proplists:get_value(overrun_warning, State#state.options, infinity)),
+  Reply =
+    case wpool_utils:do_try(
+        fun() -> (State#state.mod):handle_call(Call, From, State#state.state)
+        end) of
+      {noreply, NewState} ->
+        {noreply, State#state{state = NewState}};
+      {noreply, NewState, Timeout} ->
+        {noreply, State#state{state = NewState}, Timeout};
+      {reply, Response, NewState} ->
+        gen_server:reply(From, Response),
+        {reply, Response, State#state{state = NewState}};
+      {reply, Response, NewState, Timeout} ->
+        gen_server:reply(From, Response),
+        {reply, Response, State#state{state = NewState}, Timeout};
+      {stop, Reason, NewState} ->
+        {stop, Reason, State#state{state = NewState}};
+      {stop, Reason, Response, NewState} ->
+        gen_server:reply(From, Response),
+        {stop, Reason, Response, State#state{state = NewState}}
+    end,
+  Reply;
+handle_cast(task_end, State) ->
+  wpool_utils:task_end(),
+  {noreply, State};
 handle_cast({call, From, Call}, State) ->
   case handle_call(Call, From, State) of
     {reply, Response, NewState} ->

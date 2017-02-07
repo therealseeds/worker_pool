@@ -209,7 +209,7 @@ handle_cast({worker_ready, Worker}, State) ->
       case is_process_alive(ClientPid) andalso
            Expires > now_in_microseconds() of
         true ->
-          ok = wpool_process:cast_call(Worker, Client, Call),
+          ok = wpool_process:cast(Worker, {queue_manager, {self(), {worker_result, Worker, Client}}, {call, Call}}),
           {noreply, NewState};
         false ->
           handle_cast({worker_ready, Worker}, NewState)
@@ -234,6 +234,10 @@ handle_cast({worker_ready, Worker}, State) ->
           handle_cast({worker_ready, Worker}, NewState)
       end
   end;
+handle_cast({{worker_result, Worker, Client}, Result}, State) ->
+  gen_server:reply(Client, Result),
+  wpool_process:cast(Worker, task_end),
+  handle_cast({worker_ready, Worker}, State);
 handle_cast({cast_to_available_worker, Cast}, State) ->
   #state{workers = Workers, clients = Clients} = State,
   case gb_sets:is_empty(Workers) of
@@ -288,7 +292,7 @@ handle_call(
       case erlang:is_process_alive(ClientPid) andalso
            Expires > now_in_microseconds() of
         true  ->
-          ok = wpool_process:cast_call(Worker, Client, Call),
+          ok = wpool_process:cast(Worker, {queue_manager, {self(), Worker}, {call, Client, Call}}),
           {noreply, State#state{workers = NewWorkers}};
         false ->
           {noreply, State}
