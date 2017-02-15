@@ -75,8 +75,11 @@
 -export([ call/2
         , cast/2
         , call/3
+        , cast_call/3
         , cast/3
         , call/4
+        , cast_call/4
+        , cast_call/5
         ]).
 -export([ send_event/2
         , send_event/3
@@ -175,6 +178,25 @@ call(Sup, Call, Fun, Timeout) when is_function(Fun) ->
   wpool_process:call(Fun(Sup), Call, Timeout);
 call(Sup, Call, Strategy, Timeout) ->
   wpool_process:call(wpool_pool:Strategy(Sup), Call, Timeout).
+
+%% @equiv cast_call(Sup, From, Call)
+-spec cast_call(name(), {pid(), term()}, term()) -> term().
+cast_call(Sup, From, Call) -> cast_call(Sup, From, Call, default_strategy()).
+
+%% @equiv cast_call(Sup, From, Call, default_strategy(), infinity)
+-spec cast_call(name(), {pid(), term()}, term(), strategy()) -> term().
+cast_call(Sup, From, Call, Strategy) -> cast_call(Sup, From, Call, Strategy, infinity).
+
+%% @doc Picks a server and issues the call to it without waiting for a reply
+-spec cast_call(name(), {pid(), term()}, term(), strategy(), timeout()) -> term().
+cast_call(Sup, From, Call, available_worker, Timeout) ->
+  wpool_pool:cast_call_available_worker(Sup, From, Call, Timeout);
+cast_call(Sup, From, Call, {hash_worker, HashKey}, _Timeout) ->
+  wpool_process:cast_call(wpool_pool:hash_worker(Sup, HashKey), From, Call);
+cast_call(Sup, From, Call, Fun, _Timeout) when is_function(Fun) ->
+  wpool_process:cast_call(Fun(Sup), From, Call);
+cast_call(Sup, From, Call, Strategy, _Timeout) ->
+  wpool_process:cast_call(wpool_pool:Strategy(Sup), From, Call).
 
 %% @equiv cast(Sup, Cast, default_strategy())
 -spec cast(name(), term()) -> ok.

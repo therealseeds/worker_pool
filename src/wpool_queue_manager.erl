@@ -21,6 +21,7 @@
 -export([ start_link/2
         ]).
 -export([ call_available_worker/3
+        , cast_call_available_worker/4
         , cast_to_available_worker/2
         , send_event_to_available_worker/2
         , sync_send_event_to_available_worker/3
@@ -78,6 +79,15 @@ call_available_worker(QueueManager, Call, Timeout) ->
     _:{timeout, {gen_server, call, _}} ->
       timeout
   end.
+
+%% @doc Casts a call to the first available worker.
+%%      Since we can wait forever for a wpool:cast to be delivered
+%%      but we don't want the caller to be blocked, this function
+%%      just forwards the call when it gets the worker
+-spec cast_call_available_worker(queue_mgr(), {pid(), term()}, term(), timeout()) -> ok.
+cast_call_available_worker(QueueManager, From, Cast, Timeout) ->
+    Expires = expires(Timeout),
+    gen_server:cast(QueueManager, {cast_call_available_worker, From, Cast, Expires}).
 
 %% @doc Casts a message to the first available worker.
 %%      Since we can wait forever for a wpool:cast to be delivered
@@ -238,6 +248,17 @@ handle_cast({{worker_result, Worker, Client}, Result}, State) ->
   gen_server:reply(Client, Result),
   wpool_process:cast(Worker, task_end),
   handle_cast({worker_ready, Worker}, State);
+handle_cast({cast_call_available_worker, Client, Call, Expires}, State) ->
+    Res = handle_call({available_worker, Call, Expires}, Client, State),
+    NewRes = case Res of
+                 {reply, Reply, NewState} ->
+                     gen_server:reply(Client, Reply),
+                     {noreply, NewState};
+                 {reply, Reply, NewState, Timeout} ->
+                     gen_server:reply(Client, Reply),
+                     {noreply, NewState, Timeout}
+             end,
+    NewRes;
 handle_cast({cast_to_available_worker, Cast}, State) ->
   #state{workers = Workers, clients = Clients} = State,
   case gb_sets:is_empty(Workers) of

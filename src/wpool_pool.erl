@@ -29,6 +29,7 @@
         , hash_worker/2
         , next_available_worker/1
         , call_available_worker/3
+        , cast_call_available_worker/4
         , sync_send_event_to_available_worker/3
         , sync_send_all_event_to_available_worker/3
         , time_checker_name/1
@@ -125,6 +126,19 @@ next_available_worker(Sup) ->
 call_available_worker(Sup, Call, Timeout) ->
   case wpool_queue_manager:call_available_worker(
         queue_manager_name(Sup), Call, Timeout) of
+    noproc  -> throw(no_workers);
+    timeout -> throw(timeout);
+    Result  -> Result
+  end.
+
+%% @doc Picks the first available worker and sends the call to it.
+%%      The timeout provided includes the time it takes to get a worker
+%%      and for it to process the call.
+%% @throws no_workers | timeout
+-spec cast_call_available_worker(wpool:name(), {pid(), any()}, any(), timeout()) -> any().
+cast_call_available_worker(Sup, From, Call, Timeout) ->
+  case wpool_queue_manager:cast_call_available_worker(
+        queue_manager_name(Sup), From, Call, Timeout) of
     noproc  -> throw(no_workers);
     timeout -> throw(timeout);
     Result  -> Result
